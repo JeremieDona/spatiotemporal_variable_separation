@@ -3,6 +3,9 @@
 Official implementation of the paper *PDE-Driven Spatiotemporal Disentanglement* (Jérémie Donà,* Jean-Yves Franceschi,* Sylvain Lamprier, Patrick Gallinari).
 
 
+## [Preprint](https://arxiv.org/abs/2008.01352)
+
+
 ## Requirements
 
 All models were trained with Python 3.8.1 and PyTorch 1.4.0 using CUDA 10.1. The `requirements.txt` file lists Python package dependencies.
