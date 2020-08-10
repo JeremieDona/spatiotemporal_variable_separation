@@ -112,7 +112,7 @@ class MovingMNIST(Dataset):
     def __getitem__(self, index):
         if not self.train:
             # When testing, pick the selected video (from the precomputed testing set)
-            return self.data[index][:self.nt_cond] / 255, self.data[index][self.nt_cond:] / 255
+            return self.data[index][:self.nt_cond] / 255, self.data[index][self.nt_cond:self.seq_len] / 255
         # When training, generate videos on the fly
         x = np.zeros((self.seq_len, 1, self.frame_size, self.frame_size), dtype=np.float32)
         # Generate the trajectories of each digit independently
