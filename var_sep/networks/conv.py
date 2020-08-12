@@ -121,7 +121,7 @@ class DCGAN64Encoder(BaseEncoder):
             make_conv_block(nn.Conv2d(nf * 2, nf * 4, 4, 2, 1, bias=False), activation='leaky_relu'),
             make_conv_block(nn.Conv2d(nf * 4, nf * 8, 4, 2, 1, bias=False), activation='leaky_relu')
         ])
-        self.last_conv = make_conv_block(nn.Conv2d(nf * 8, nh, 4, 1, 0, bias=False), activation='tanh')
+        self.last_conv = make_conv_block(nn.Conv2d(nf * 8, nh, 4, 1, 0, bias=False), activation='none')
 
 
 class VGG64Encoder(BaseEncoder):
@@ -165,7 +165,7 @@ class VGG64Encoder(BaseEncoder):
         ])
         self.last_conv = nn.Sequential(
             nn.MaxPool2d(kernel_size=2, stride=2, padding=0),
-            make_conv_block(nn.Conv2d(nf * 8, nh, 4, 1, 0, bias=False), activation='tanh')
+            make_conv_block(nn.Conv2d(nf * 8, nh, 4, 1, 0, bias=False), activation='none')
         )
 
 
