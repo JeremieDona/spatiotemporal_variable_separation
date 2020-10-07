@@ -25,6 +25,7 @@ python -m var_sep.main
 
 Preprocessing scripts are located in the `var_sep/preprocessing` folder for the WaveEq, WaveEq-100 and Moving MNIST datasets:
 - `var_sep.preprocessing.mnist.make_test_set` creates the Moving MNIST testing set;
+- `var_sep.preprocessing.chairs.gen_chairs` creates, from the original dataset to download at [https://www.di.ens.fr/willow/research/seeing3Dchairs/data/rendered_chairs.tar](https://www.di.ens.fr/willow/research/seeing3Dchairs/data/rendered_chairs.tar), the 64x64 images used by the model;
 - `var_sep.preprocessing.wave.gen_wave` generates the WaveEq dataset;
 - `var_sep.preprocessing.wave.gen_pixels` chooses pixels to draw from the WaxeEq dataset to create the WaveEq-100 dataset.
 
@@ -45,6 +46,7 @@ which lists options and hyperparameters to train our model.
 Evaluation scripts on testing sets are located in the `var_sep/test` folder.
 - `var_sep.test.mnist.test` evaluates the prediction PSNR and SSIM of the model on Moving MNIST;
 - `var_sep.test.mnist.test_disentanglement` evaluates the disentanglement PSNR and SSIM of the model by swapping contents and digits on Moving MNIST;
+- `var_sep.test.chairs.test_disentanglement` evaluates the disentanglement PSNR and SSIM of the model by swapping contents and chairs on 3D Warehouse Chairs;
 - `var_sep.sst.wave.test` computes the prediction MSE of the model after 6 and 10 prediction steps on SST;
 - `var_sep.test.wave.test` computes the prediction MSE of the model after 40 prediction steps on WaveEq and WaveEq-100;
 Please refer to the corresponding help messages for further information.

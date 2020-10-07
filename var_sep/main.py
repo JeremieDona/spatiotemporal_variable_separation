@@ -25,6 +25,7 @@ from torch import optim
 from torch.utils.data import DataLoader
 
 from var_sep.data.moving_mnist import MovingMNIST
+from var_sep.data.chairs import Chairs
 from var_sep.data.sst import SST
 from var_sep.data.wave_eq import WaveEq, WaveEqPartial
 from var_sep.networks.model import SeparableNetwork
@@ -61,6 +62,10 @@ if __name__ == "__main__":
                                              args.n_object, True)
         last_activation = 'sigmoid'
         shape = [1, 64, 64]
+    elif args.data == 'chairs':
+        train_set = Chairs(True, args.data_dir, args.nt_cond, args.nt_cond + args.nt_pred)
+        last_activation = 'sigmoid'
+        shape = [3, 64, 64]
     elif args.data == "sst":
         train_set = SST(args.data_dir, args.nt_cond, args.nt_pred, True, zones=args.zones)
         shape = [1, 64, 64]
@@ -103,9 +108,9 @@ if __name__ == "__main__":
     Et = get_encoder(args.architecture, shape, args.code_size_t, args.enc_hidden_size, args.nt_cond,
                      args.init_encoder, args.gain_encoder).to(device)
 
-    decoder = get_decoder(args.architecture, shape, args.code_size_t, args.code_size_s, last_activation,
-                          args.dec_hidden_size, args.mixing, args.skipco, args.init_encoder,
-                          args.gain_encoder).to(device)
+    decoder = get_decoder(args.architecture if args.decoder_architecture is None else args.decoder_architecture,
+                          shape, args.code_size_t, args.code_size_s, last_activation, args.dec_hidden_size,
+                          args.mixing, args.skipco, args.init_encoder, args.gain_encoder).to(device)
 
     t_resnet = get_resnet(args.code_size_t, args.n_blocks, args.res_hidden_size, args.init_resnet,
                           args.gain_resnet).to(device)

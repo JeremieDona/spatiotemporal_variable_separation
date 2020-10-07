@@ -1,18 +1,3 @@
-# Copyright 2020 Jérémie Donà, Jean-Yves Franceschi, Patrick Gallinari, Sylvain Lamprier
-
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-
-#     http://www.apache.org/licenses/LICENSE-2.0
-
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-
 # Code heavily modified from SRVP https://github.com/edouardelasalles/srvp; see license notice and copyrights below.
 
 # Copyright 2020 Mickael Chen, Edouard Delasalles, Jean-Yves Franceschi, Patrick Gallinari, Sylvain Lamprier
@@ -34,21 +19,19 @@ import argparse
 import os
 import random
 import torch
-import math
 import itertools
 
 import numpy as np
 import torch.nn.functional as F
 
 from collections import defaultdict
-from torch.utils.data import DataLoader, Dataset
-from torchvision import datasets
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from var_sep.data.moving_mnist import MovingMNIST
+from var_sep.data.chairs import Chairs
 from var_sep.utils.helper import DotDict, load_json
 from var_sep.utils.ssim import ssim_loss
-from var_sep.networks.conv import DCGAN64Encoder, VGG64Encoder, DCGAN64Decoder, VGG64Decoder
+from var_sep.networks.conv import DCGAN64Encoder, VGG64Encoder, DCGAN64Decoder, VGG64Decoder, ResNet18
 from var_sep.networks.mlp_encdec import MLPEncoder, MLPDecoder
 from var_sep.networks.model import SeparableNetwork
 
@@ -60,49 +43,24 @@ def _ssim_wrapper(pred, gt):
     return ssim.mean(dim=[2, 3]).view(bsz, nt_pred, img_shape[0])
 
 
-class SwapDataset(Dataset):
+class SwapDataset(Chairs):
 
-    def __init__(self, data_dir, seq_len, nt_cond, n_object):
-        self.seq_len = seq_len
-        self.n_object = n_object
-        self.nt_cond = nt_cond
-        self.frame_size = 64
-        self.object_size = 28
-        self.digits_permutation = np.random.permutation(10000)
-        self.trajectories = np.load(os.path.join(data_dir, f'mmnist_test_{n_object}digits_{self.frame_size}.npz'),
-                                    allow_pickle=True)['latents']
-        self.images = datasets.MNIST(data_dir, train=False, download=True)
-
-    def __len__(self):
-        return 10000 // self.n_object
+    def __init__(self, train, data_root, nt_cond, seq_len=20, image_size=64):
+        super(SwapDataset, self).__init__(train, data_root, nt_cond, seq_len=seq_len, image_size=image_size)
 
     def __getitem__(self, index):
-        # get trajectory
-        x_trajectory_reverse = np.zeros((self.seq_len, 1, self.frame_size, self.frame_size), dtype=np.float32)
-        x_swap = np.zeros((math.factorial(self.n_object), self.seq_len, 1, self.frame_size, self.frame_size),
-                          dtype=np.float32)
-        img = [self.images[self.digits_permutation[index + i * (10000 // self.n_object)]][0]
-               for i in range(self.n_object)]
-        trajectory = self.trajectories[:, index]
-        trajectory_reverse = self.trajectories[:, len(self) - index - 1]
-        for t in range(self.seq_len):
-            for i in range(self.n_object):
-                sx, sy, _, _ = trajectory_reverse[t, i]
-                x_trajectory_reverse[t, 0, sx:sx + self.object_size, sy:sy + self.object_size] += img[i]
-            for j, reordering in enumerate(itertools.permutations(range(self.n_object))):
-                for i in range(self.n_object):
-                    sx, sy, _, _ = trajectory[t, i]
-                    x_swap[j, t, 0, sx:sx + self.object_size, sy:sy + self.object_size] += img[reordering[i]]
-        x_trajectory_reverse[x_trajectory_reverse > 255] = 255
-        x_swap[x_swap > 255] = 255
-        return (torch.tensor(x_trajectory_reverse[:self.nt_cond]) / 255,
-                torch.tensor(x_trajectory_reverse[self.nt_cond:]) / 255,
-                torch.tensor(x_swap[:, :self.nt_cond]) / 255, torch.tensor(x_swap[:, self.nt_cond:]) / 255)
+        idx_content = np.random.randint(self.stop_idx - self.start_idx)
+        id_st_content = np.random.randint(self.max_length - self.seq_len)
+        sequence = torch.tensor(self.get_sequence(index, chosen_idx=idx_content,
+                                                  chosen_id_st=id_st_content) / 255).permute(0, 3, 1, 2).float()
+        sequence_swap = torch.tensor(self.get_sequence(index,
+                                                       chosen_idx=idx_content) / 255).permute(0, 3, 1, 2).float()
+        return (sequence[:self.nt_cond], sequence[self.nt_cond:],
+                sequence_swap[:self.nt_cond].unsqueeze(0), sequence_swap[self.nt_cond:].unsqueeze(0))
 
 
 def load_dataset(args, train=False):
-    return MovingMNIST.make_dataset(args.data_dir, 64, args.nt_cond, args.nt_cond + args.nt_pred, 4, True,
-                                    args.n_object, train)
+    return Chairs(train, args.data_dir, args.nt_cond, seq_len=args.nt_cond + args.nt_pred)
 
 
 def build_model(args):
@@ -136,6 +94,7 @@ def main(args):
     xp_config.data_dir = args.data_dir
     xp_config.xp_dir = args.xp_dir
     xp_config.nt_pred = args.nt_pred
+    xp_config.n_object = 1
 
     ##################################################################################################################
     # Load test data
@@ -143,9 +102,9 @@ def main(args):
     print('Loading data...')
     test_dataset = load_dataset(xp_config, train=False)
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size,  pin_memory=True)
-    swap_dataset = SwapDataset(args.data_dir, xp_config.nt_cond + args.nt_pred, xp_config.nt_cond, xp_config.n_object)
+    swap_dataset = SwapDataset(False, args.data_dir, xp_config.nt_cond, seq_len=xp_config.nt_cond + args.nt_pred)
     swap_loader = DataLoader(swap_dataset, batch_size=args.batch_size, pin_memory=True)
-    nc = 1
+    nc = 3
     size = 64
 
     ##################################################################################################################
@@ -224,7 +183,7 @@ def main(args):
 
 
 if __name__ == '__main__':
-    p = argparse.ArgumentParser(prog="PDE-Driven Spatiotemporal Disentanglement (Moving MNIST content swap testing)")
+    p = argparse.ArgumentParser(prog="PDE-Driven Spatiotemporal Disentanglement (3D Warehouse Chairs content swap testing)")
     p.add_argument('--data_dir', type=str, metavar='DIR', required=True,
                    help='Directory where the dataset is saved.')
     p.add_argument('--xp_dir', type=str, metavar='DIR', required=True,

@@ -94,6 +94,6 @@ class SST(Dataset):
                                  self.climato[file_id][1][idx_id + 1: idx_id + self.pred_h + 1])
             mu_norm, std_norm = (self.cst[file_id][0][idx_id + 1: idx_id + self.pred_h + 1],
                                  self.cst[file_id][1][idx_id + 1: idx_id + self.pred_h + 1])
-            return inputs, target, mu_clim, std_clim, mu_norm, std_norm
+            return inputs, target, mu_clim, std_clim, mu_norm, std_norm, file_id
         else:
             return torch.tensor(inputs, dtype=torch.float), torch.tensor(target, dtype=torch.float)

@@ -33,8 +33,8 @@ except Exception:
 
 def zero_order_loss(s_code_old, s_code_new, skipco):
     if skipco:
-        s_code_old = s_code_old[0]
-        s_code_new = s_code_new[0]
+        s_code_old = torch.cat([s_code_old[0].flatten()] + [x.flatten() for x in s_code_old[1]])
+        s_code_new = torch.cat([s_code_new[0].flatten()] + [x.flatten() for x in s_code_new[1]])
     return (s_code_old - s_code_new).pow(2).mean()
 
 

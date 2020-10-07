@@ -15,7 +15,7 @@
 
 import numpy as np
 
-from var_sep.networks.conv import DCGAN64Encoder, VGG64Encoder, DCGAN64Decoder, VGG64Decoder
+from var_sep.networks.conv import DCGAN64Encoder, VGG64Encoder, DCGAN64Decoder, VGG64Decoder, ResNet18
 from var_sep.networks.mlp_encdec import MLPEncoder, MLPDecoder
 from var_sep.networks.resnet import MLPResnet
 from var_sep.networks.utils import init_net
@@ -27,6 +27,8 @@ def get_encoder(nn_type, shape, output_size, hidden_size, nt_cond, init_type, in
         encoder = DCGAN64Encoder(nc * nt_cond, output_size, hidden_size)
     elif nn_type == 'vgg':
         encoder = VGG64Encoder(nc * nt_cond, output_size, hidden_size)
+    elif nn_type == 'resnet':
+        encoder = ResNet18(output_size, nc * nt_cond)
     elif nn_type in ['mlp', 'large_mlp']:
         input_size = nt_cond * np.prod(np.array(shape))
         encoder = MLPEncoder(input_size, hidden_size, output_size, 3)

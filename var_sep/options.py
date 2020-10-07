@@ -16,8 +16,9 @@
 import argparse
 
 
-DATASETS = ['wave', 'wave_partial', 'sst', 'mnist']
-ARCH_TYPES = ['dcgan', 'vgg', 'mlp', 'large_mlp']
+DATASETS = ['wave', 'wave_partial', 'sst', 'mnist', 'chairs']
+ARCH_TYPES = ['dcgan', 'vgg', 'resnet', 'mlp', 'large_mlp']
+DECODER_ARCH_TYPES = ['dcgan', 'vgg', 'mlp', 'large_mlp']
 INITIALIZATIONS = ['orthogonal', 'kaiming', 'normal']
 MIXING = ['concat', 'mul']
 
@@ -54,6 +55,8 @@ config_p.add_argument('--lamb_pred', type=float, metavar='LAMBDA', default=45,
                       help='Multiplier of the prediction loss.')
 config_p.add_argument('--architecture', type=str, metavar='ARCH', default='dcgan', choices=ARCH_TYPES,
                       help='Encoder and decoder architecture.')
+config_p.add_argument('--decoder_architecture', type=str, metavar='ARCH', default=None, choices=DECODER_ARCH_TYPES,
+                      help='If not None, overwrite the decoder architecture choice.')
 config_p.add_argument('--skipco', action='store_true',
                       help='Whether to use skip connections from encoders to decoders.')
 config_p.add_argument('--res_hidden_size', type=int, metavar='SIZE', default=512,
