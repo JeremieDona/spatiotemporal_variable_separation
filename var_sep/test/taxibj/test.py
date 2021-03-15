@@ -19,42 +19,39 @@ import torch
 
 import numpy as np
 
-from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from var_sep.data.wave_eq import WaveEq, WaveEqPartial
+from var_sep.data.taxibj import TaxiBJ
 from var_sep.utils.helper import DotDict, load_json
 from var_sep.test.utils import load_model
 
 
-def load_dataset(args, train=False):
-    if args.data == 'wave':
-        return WaveEq(args.data_dir, args.nt_cond, args.nt_cond + args.nt_pred, train, args.downsample)
-    else:
-        return WaveEqPartial(args.data_dir, args.nt_cond, args.nt_cond + args.nt_pred, train, args.downsample,
-                             args.n_wave_points)
+def get_min(test_loader):
+    mins, maxs = {}, {}
+    for zone in test_loader.zones:
+        mins[zone] = test_loader.data[zone].min()
+        maxs[zone] = test_loader.data[zone].max()
+    return mins, maxs
 
 
-def compute_mse(args, batch_size, test_set, sep_net):
+def load_dataset(args):
+    return TaxiBJ.make_datasets(args.data_dir, len_closeness=args.nt_cond + args.nt_pred, nt_cond=args.nt_cond)[1]
+
+
+def compute_mse(args, test_set, sep_net):
     all_mse = []
-    loader = DataLoader(test_set, batch_size=batch_size, pin_memory=False, shuffle=False, num_workers=3)
     torch.set_grad_enabled(False)
-    for cond, target in tqdm(loader):
-        cond, target = cond.to(args.device), target.to(args.device)
+    for cond, target in tqdm(test_set):
+        cond, target = cond.unsqueeze(0).to(args.device), target.unsqueeze(0).to(args.device)
         if args.offset:
             forecasts = sep_net.get_forecast(cond, target.size(1) + args.nt_cond)[0]
             forecasts = forecasts[:, args.nt_cond:]
         else:
             forecasts = sep_net.get_forecast(cond, target.size(1))[0]
 
-        forecasts = forecasts.view(target.shape)
+        mse = (forecasts - target).pow(2).mean(dim=-1).mean(dim=-1).mean(dim=-1)
 
-        if args.data == 'wave':
-            mse = (forecasts - target).pow(2).mean(dim=-1).mean(dim=-1).mean(dim=-1)
-        else:
-            mse = (forecasts - target).pow(2).mean(dim=-1)
-
-        all_mse.append(mse.data.cpu().numpy())
+        all_mse.append(mse.cpu().numpy())
 
     return all_mse
 
@@ -71,15 +68,15 @@ def main(args):
     xp_config.device = device
     xp_config.data_dir = args.data_dir
     xp_config.xp_dir = args.xp_dir
-    xp_config.nt_pred = 40
-    args.nt_pred = 40
+    xp_config.nt_pred = 4
+    args.nt_pred = 4
 
-    test_set = load_dataset(xp_config, train=False)
+    test_set = load_dataset(xp_config)
     sep_net = load_model(xp_config, args.epoch)
 
-    all_mse = compute_mse(xp_config, args.batch_size, test_set, sep_net)
+    all_mse = compute_mse(xp_config, test_set, sep_net)
     mse_array = np.concatenate(all_mse, axis=0)
-    print(f'MSE at t+40: {np.mean(mse_array.mean(axis=0)[:40])}')
+    print(f'MSE at t+4: {np.mean(mse_array.mean(axis=0)[:4])}')
 
 
 if __name__ == '__main__':
@@ -90,8 +87,6 @@ if __name__ == '__main__':
                    help='Directory where the model configuration file and checkpoints are saved.')
     p.add_argument('--epoch', type=int, metavar='EPOCH', default=None,
                    help='If specified, loads the checkpoint of the corresponding epoch number.')
-    p.add_argument('--batch_size', type=int, metavar='BATCH', default=256,
-                   help='Batch size used to compute metrics.')
     p.add_argument('--device', type=int, metavar='DEVICE', default=None,
                    help='GPU where the model should be placed when testing (if None, on the CPU)')
     args = DotDict(vars(p.parse_args()))

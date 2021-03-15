@@ -50,7 +50,6 @@ class SeparableNetwork(nn.Module):
         self.__grad = grad
 
     def get_forecast(self, cond, n_forecast, init_t_code=None, init_s_code=None):
-        s_codes = []
         t_codes = []
         forecasts = []
         t_residuals = []
@@ -69,7 +68,6 @@ class SeparableNetwork(nn.Module):
         else:
             t_code = init_t_code
 
-        s_codes.append(s_code)
         t_codes.append(t_code)
 
         # Decode first frame
@@ -87,6 +85,5 @@ class SeparableNetwork(nn.Module):
         # Stack predictions
         forecasts = torch.cat([x.unsqueeze(1) for x in forecasts], dim=1)
         t_codes = torch.cat([x.unsqueeze(1) for x in t_codes], dim=1)
-        s_codes = torch.cat([x.unsqueeze(1) for x in s_codes], dim=1)
 
-        return forecasts, t_codes, s_codes, t_residuals
+        return forecasts, t_codes, s_code, t_residuals

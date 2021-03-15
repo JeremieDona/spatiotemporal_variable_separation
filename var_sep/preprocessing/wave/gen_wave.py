@@ -133,7 +133,7 @@ def generate(size, frame_size, seq_len, dt, data_dir):
         dF = partial(derivative, source=source, c=c, nx=frame_size, ny=frame_size, dx=1, dz=1, circular=True, order=5)
         t = torch.arange(0, dt * seq_len, dt)
         simul = odeint(dF, y0=initial_condition.expand((2, frame_size, frame_size)), t=t, method="rk4")[:, 0]
-        print(simul.size())
+
         # Save sequences and velocities coefficients
         torch.save({'simul': simul, 'c': c}, os.path.join(data_dir, f'homogenous_wave{i}.pt'))
 

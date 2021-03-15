@@ -47,17 +47,7 @@ from tqdm import tqdm
 
 from var_sep.data.moving_mnist import MovingMNIST
 from var_sep.utils.helper import DotDict, load_json
-from var_sep.utils.ssim import ssim_loss
-from var_sep.networks.conv import DCGAN64Encoder, VGG64Encoder, DCGAN64Decoder, VGG64Decoder
-from var_sep.networks.mlp_encdec import MLPEncoder, MLPDecoder
-from var_sep.networks.model import SeparableNetwork
-
-
-def _ssim_wrapper(pred, gt):
-    bsz, nt_pred = pred.shape[0], pred.shape[1]
-    img_shape = pred.shape[2:]
-    ssim = ssim_loss(pred.reshape(bsz * nt_pred, *img_shape), gt.reshape(bsz * nt_pred, *img_shape), max_val=1., reduction='none')
-    return ssim.mean(dim=[2, 3]).view(bsz, nt_pred, img_shape[0])
+from var_sep.test.utils import load_model, _ssim_wrapper
 
 
 class SwapDataset(Dataset):
@@ -105,16 +95,6 @@ def load_dataset(args, train=False):
                                     args.n_object, train)
 
 
-def build_model(args):
-    Es = torch.load(os.path.join(args.xp_dir, 'ov_Es.pt'), map_location=args.device).to(args.device)
-    Et = torch.load(os.path.join(args.xp_dir, 'ov_Et.pt'), map_location=args.device).to(args.device)
-    t_resnet = torch.load(os.path.join(args.xp_dir, 't_resnet.pt'), map_location=args.device).to(args.device)
-    decoder = torch.load(os.path.join(args.xp_dir, 'decoder.pt'), map_location=args.device).to(args.device)
-    sep_net = SeparableNetwork(Es, Et, t_resnet, decoder, args.nt_cond, args.skipco)
-    sep_net.eval()
-    return sep_net
-
-
 def main(args):
     ##################################################################################################################
     # Setup
@@ -152,7 +132,7 @@ def main(args):
     # Load model
     ##################################################################################################################
     print('Loading model...')
-    sep_net = build_model(xp_config)
+    sep_net = load_model(xp_config, args.epoch)
 
     ##################################################################################################################
     # Eval
@@ -174,7 +154,7 @@ def main(args):
         x_cond = x_cond.to(device)
 
         # Extraction of S
-        _, _, s_codes, _ = sep_net.get_forecast(x_cond, nt_test)
+        _, _, s_code, _ = sep_net.get_forecast(x_cond, nt_test)
 
         # Content swap
         x_swap_cond, x_swap_target = batch
@@ -184,7 +164,7 @@ def main(args):
         x_swap_target_byte = x_swap_target.cpu().mul(255).byte()
         cond_swap.append(x_swap_cond_byte.permute(0, 1, 3, 4, 2))
         target_swap.append(x_swap_target_byte.permute(0, 1, 3, 4, 2))
-        x_swap_pred = sep_net.get_forecast(x_swap_cond, nt_test, init_s_code=s_codes[:, 0])[0]
+        x_swap_pred = sep_net.get_forecast(x_swap_cond, nt_test, init_s_code=s_code)[0]
         x_swap_pred = x_swap_pred[:, xp_config.nt_cond:]
         content_swap.append(x_swap_pred.cpu().mul(255).byte().permute(0, 1, 3, 4, 2))
         gt_swap.append(x_gt_swap[:, 0].cpu().mul(255).byte().permute(0, 1, 3, 4, 2))
@@ -211,7 +191,7 @@ def main(args):
     for name in results.keys():
         res = torch.cat(results[name]).numpy()
         results[name] = res
-        print(name, res.mean(), '+/-', 1.960 * res.std() / np.sqrt(len(res)))
+        print(name, res.mean())
 
     ##################################################################################################################
     # Save samples
@@ -229,12 +209,14 @@ if __name__ == '__main__':
                    help='Directory where the dataset is saved.')
     p.add_argument('--xp_dir', type=str, metavar='DIR', required=True,
                    help='Directory where the model configuration file and checkpoints are saved.')
+    p.add_argument('--epoch', type=int, metavar='EPOCH', default=None,
+                   help='If specified, loads the checkpoint of the corresponding epoch number.')
     p.add_argument('--batch_size', type=int, metavar='BATCH', default=16,
                    help='Batch size used to compute metrics.')
     p.add_argument('--nt_pred', type=int, metavar='PRED', required=True,
                    help='Total of frames to predict.')
     p.add_argument('--device', type=int, metavar='DEVICE', default=None,
-                   help='GPU where the model should be placed when testing (if None, put it on the CPU)')
+                   help='GPU where the model should be placed when testing (if None, on the CPU)')
     p.add_argument('--test_seed', type=int, metavar='SEED', default=1,
                    help='Manual seed.')
     args = DotDict(vars(p.parse_args()))

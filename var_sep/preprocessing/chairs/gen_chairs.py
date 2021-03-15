@@ -27,8 +27,9 @@ def generate(data_dir, image_size):
     for sequence_folder in tqdm.tqdm(sequence_folders, ncols=0):
         sequence_dir = os.path.join(data_dir, sequence_folder, 'renders')
         for i, image_file in enumerate(sorted(os.listdir(sequence_dir))):
-            image = Image.open(os.path.join(sequence_dir, image_file)).crop((100, 100, 500, 500)).resize((image_size, image_size),
-                                                                             resample=Image.LANCZOS)
+            image = Image.open(os.path.join(sequence_dir,
+                                            image_file)).crop((100, 100, 500, 500)).resize((image_size, image_size),
+                                                                                           resample=Image.LANCZOS)
             image.save(os.path.join(sequence_dir, f'{i}.png'))
 
 

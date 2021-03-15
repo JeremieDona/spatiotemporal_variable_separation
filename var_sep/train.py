@@ -23,12 +23,16 @@ from tqdm import tqdm
 from var_sep.utils.helper import save
 
 
-# Apex
+# Mixed-precision training packages
 try:
-    from apex import amp
-    APX_ = 1
+    from apex import amp as apex_amp
 except Exception:
-    APX_ = 0
+    pass
+
+try:
+    from torch.cuda import amp as torch_amp
+except ImportError:
+    pass
 
 
 def zero_order_loss(s_code_old, s_code_new, skipco):
@@ -84,14 +88,13 @@ def ae_loss(cond, target, sep_net, nt_cond, offset, skipco):
     return loss, s_code_new, s_code_old
 
 
-def train(xp_dir, train_loader, device, sep_net, optimizer, scheduler, apex_amp, epochs, lamb_ae, lamb_s, lamb_t,
-          lamb_pred, offset, nt_cond, nt_pred, no_s, skipco):
+def train(xp_dir, train_loader, device, sep_net, optimizer, scheduler, use_apex_amp, use_torch_amp, epochs, lamb_ae,
+          lamb_s, lamb_t, lamb_pred, offset, nt_cond, nt_pred, no_s, skipco, chkpt_interval, average_tloss):
 
-    if apex_amp and not APX_:
-        raise ImportError('Apex not installed (https://github.com/NVIDIA/apex)')
-
-    if apex_amp:
-        sep_net, optimizer = amp.initialize(sep_net, optimizer, opt_level='O1')
+    if use_apex_amp:
+        sep_net, optimizer = apex_amp.initialize(sep_net, optimizer, opt_level='O1', verbosity=False)
+    if use_torch_amp:
+        scaler = torch_amp.GradScaler()
 
     if no_s:
         lamb_t = 0
@@ -100,10 +103,12 @@ def train(xp_dir, train_loader, device, sep_net, optimizer, scheduler, apex_amp,
     assert offset == nt_cond or offset == 0
 
     try:
+        pb = tqdm(total=epochs * len(train_loader), ncols=0)
         for epoch in range(epochs):
 
             sep_net.train()
-            for bt, (cond, target) in enumerate(tqdm(train_loader)):
+
+            for cond, target in train_loader:
                 cond, target = cond.to(device), target.to(device)
                 total_loss = 0
 
@@ -125,7 +130,7 @@ def train(xp_dir, train_loader, device, sep_net, optimizer, scheduler, apex_amp,
                 # FORECAST LOSS
                 # #############
                 full_data = torch.cat([cond, target], dim=1)  # Concatenate all frames
-                forecasts, t_codes, s_codes, t_residuals = sep_net.get_forecast(cond, nt_pred + offset, init_s_code=s_old)
+                forecasts, t_codes, _, _ = sep_net.get_forecast(cond, nt_pred + offset, init_s_code=s_old)
                 # To make data and target match
                 if offset == 0:
                     forecast_offset = nt_cond
@@ -137,20 +142,32 @@ def train(xp_dir, train_loader, device, sep_net, optimizer, scheduler, apex_amp,
                 # ################
                 # T REGULARIZATION
                 # ################
-                t_reg = 0.5 * torch.sum(t_codes[:, 0].pow(2), dim=1).mean()
+                if average_tloss:
+                    t_reg = 0.5 * (t_codes[:, 0].pow(2).view(full_data.shape[0], -1)).mean()
+                else:
+                    t_reg = 0.5 * torch.sum(t_codes[:, 0].pow(2), dim=1).mean()
                 total_loss += lamb_t * t_reg
 
-                if apex_amp:
-                    with amp.scale_loss(total_loss, optimizer) as scaled_loss:
-                        scaled_loss.backward()
-
+                if use_torch_amp:
+                    with torch_amp.autocast(enabled=False):
+                        scaler.scale(total_loss).backward()
+                        scaler.step(optimizer)
+                        scaler.update()
                 else:
-                    total_loss.backward()
+                    if use_apex_amp:
+                        with apex_amp.scale_loss(total_loss, optimizer) as scaled_loss:
+                            scaled_loss.backward()
+                    else:
+                        total_loss.backward()
+                    optimizer.step()
 
-                optimizer.step()
+                pb.update()
 
             if scheduler is not None:
                 scheduler.step()
+
+            if chkpt_interval is not None and (epoch + 1) % chkpt_interval == 0:
+                save(xp_dir, sep_net, epoch_number=epoch + 1)
 
     except KeyboardInterrupt:
         pass

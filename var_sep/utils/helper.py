@@ -19,14 +19,15 @@ import torch
 import yaml
 
 
-def save(elem_xp_path, sep_net):
+def save(elem_xp_path, sep_net, epoch_number=None):
     to_save = True
+    append = f'_{epoch_number}' if epoch_number is not None else ''
     while to_save:
         try:
-            torch.save(sep_net.Et, os.path.join(elem_xp_path, 'ov_Et.pt'))
-            torch.save(sep_net.Es, os.path.join(elem_xp_path, 'ov_Es.pt'))
-            torch.save(sep_net.decoder, os.path.join(elem_xp_path, 'decoder.pt'))
-            torch.save(sep_net.t_resnet, os.path.join(elem_xp_path, 't_resnet.pt'))
+            torch.save(sep_net.Et, os.path.join(elem_xp_path, f'ov_Et{append}.pt'))
+            torch.save(sep_net.Es, os.path.join(elem_xp_path, f'ov_Es{append}.pt'))
+            torch.save(sep_net.decoder, os.path.join(elem_xp_path, f'decoder{append}.pt'))
+            torch.save(sep_net.t_resnet, os.path.join(elem_xp_path, f't_resnet{append}.pt'))
             to_save = False
         except:
             print("unable to save all files")

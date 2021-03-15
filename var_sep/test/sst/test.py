@@ -23,17 +23,7 @@ from tqdm import tqdm
 
 from var_sep.data.sst import SST
 from var_sep.utils.helper import DotDict, load_json
-from var_sep.networks.conv import DCGAN64Encoder, VGG64Encoder, DCGAN64Decoder, VGG64Decoder
-from var_sep.networks.mlp_encdec import MLPEncoder, MLPDecoder
-from var_sep.networks.model import SeparableNetwork
-from var_sep.utils.ssim import ssim_loss
-
-
-def _ssim_wrapper(pred, gt):
-    bsz, nt_pred = pred.shape[0], pred.shape[1]
-    img_shape = pred.shape[2:]
-    ssim = ssim_loss(pred.reshape(bsz * nt_pred, *img_shape), gt.reshape(bsz * nt_pred, *img_shape), max_val=1., reduction='none')
-    return ssim.mean(dim=[2, 3]).view(bsz, nt_pred, img_shape[0])
+from var_sep.test.utils import load_model, _ssim_wrapper
 
 
 def get_min(test_loader):
@@ -48,17 +38,7 @@ def load_dataset(args, train=False, zones=range(17, 21)):
     return SST(args.data_dir, args.nt_cond, args.nt_pred, train, zones=zones, eval=True)
 
 
-def build_model(args):
-    Es = torch.load(os.path.join(args.xp_dir, 'ov_Es.pt'), map_location=args.device).to(args.device)
-    Et = torch.load(os.path.join(args.xp_dir, 'ov_Et.pt'), map_location=args.device).to(args.device)
-    t_resnet = torch.load(os.path.join(args.xp_dir, 't_resnet.pt'), map_location=args.device).to(args.device)
-    decoder = torch.load(os.path.join(args.xp_dir, 'decoder.pt'), map_location=args.device).to(args.device)
-    sep_net = SeparableNetwork(Es, Et, t_resnet, decoder, args.nt_cond, args.skipco)
-    sep_net.eval()
-    return sep_net
-
-
-def compute_mse(args, test_set, sep_net):
+def compute_mse_ssim(args, test_set, sep_net):
     mins, maxs = get_min(test_set)
     all_mse = []
     all_ssim = []
@@ -66,10 +46,10 @@ def compute_mse(args, test_set, sep_net):
     for cond, target, mu_clim, std_clim, mu_norm, std_norm, file_id in tqdm(test_set):
         cond, target = cond.unsqueeze(0).to(args.device), target.unsqueeze(0).to(args.device)
         if args.offset:
-            forecasts, t_codes, s_codes, t_residuals = sep_net.get_forecast(cond, target.size(1) + args.nt_cond)
+            forecasts = sep_net.get_forecast(cond, target.size(1) + args.nt_cond)[0]
             forecasts = forecasts[:, args.nt_cond:]
         else:
-            forecasts, t_codes, s_codes, t_residuals, s_residuals = sep_net.get_forecast(cond, target.size(1))
+            forecasts = sep_net.get_forecast(cond, target.size(1))[0]
 
         mu_norm, std_norm = (torch.tensor(mu_norm, dtype=torch.float).to(args.device),
                              torch.tensor(std_norm, dtype=torch.float).to(args.device))
@@ -85,7 +65,7 @@ def compute_mse(args, test_set, sep_net):
         mse = (forecasts - target).pow(2).mean(dim=-1).mean(dim=-1).mean(dim=-1)
 
         # Normalize by min and max per zone for SSIM
-        min_, max_ = mins[file_id],  maxs[file_id],
+        min_, max_ = mins[file_id], maxs[file_id]
         forecasts = (forecasts - min_)/ (max_ - min_)
         target = (target - min_) / (max_ - min_)
         ssim = _ssim_wrapper(forecasts, target)
@@ -106,13 +86,15 @@ def main(args):
     # Load XP config
     xp_config = load_json(os.path.join(args.xp_dir, 'params.json'))
     xp_config.device = device
+    xp_config.data_dir = args.data_dir
+    xp_config.xp_dir = args.xp_dir
     xp_config.nt_pred = 10
     args.nt_pred = 10
 
     test_set = load_dataset(xp_config, train=False)
-    sep_net = build_model(xp_config)
+    sep_net = load_model(xp_config, args.epoch)
 
-    all_mse, all_ssim = compute_mse(xp_config, test_set, sep_net)
+    all_mse, all_ssim = compute_mse_ssim(xp_config, test_set, sep_net)
     mse_array = np.concatenate(all_mse, axis=0)
     ssim_array = np.concatenate(all_ssim, axis=0)
     print(f'MSE at t+10: {np.mean(mse_array.mean(axis=0)[:10])}')
@@ -127,7 +109,9 @@ if __name__ == '__main__':
                    help='Directory where the dataset is saved.')
     p.add_argument('--xp_dir', type=str, metavar='DIR', required=True,
                    help='Directory where the model configuration file and checkpoints are saved.')
+    p.add_argument('--epoch', type=int, metavar='EPOCH', default=None,
+                   help='If specified, loads the checkpoint of the corresponding epoch number.')
     p.add_argument('--device', type=int, metavar='DEVICE', default=None,
-                   help='GPU where the model should be placed when testing (if None, put it on the CPU)')
+                   help='GPU where the model should be placed when testing (if None, on the CPU)')
     args = DotDict(vars(p.parse_args()))
     main(args)

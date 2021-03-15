@@ -65,8 +65,7 @@ class MLP(nn.Module):
         assert nhid == 0 or nlayers > 1
         modules = [
             make_lin_block(
-                ninp=ninp if il == 0 else nhid,
-                nout=nout if il == nlayers - 1 else nhid,
+                ninp=ninp if il == 0 else nhid, nout=nout if il == nlayers - 1 else nhid,
                 activation=activation if il > 0 else 'none',
             ) for il in range(nlayers)
         ]
