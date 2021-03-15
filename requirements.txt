@@ -4,7 +4,7 @@ h5py==2.10.0
 numpy==1.18.1
 netCDF4==1.5.3
 pandas==1.1.4
-pillow==7.0.0
+pillow==7.1.0
 pyyaml==5.3
 scikit-image==0.16.2
 scipy==1.4.1
