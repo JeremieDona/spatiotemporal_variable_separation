@@ -20,10 +20,6 @@ We also enabled PyTorch's inetrgated [mixed-precision training package](https://
 
 ## Datasets
 
-Preprocessing scripts are located in the `var_sep/preprocessing` folder for the WaveEq, WaveEq-100 and Moving MNIST datasets;
-- `var_sep.preprocessing.wave.gen_wave` generates the WaveEq dataset;
-- `var_sep.preprocessing.wave.gen_pixels` chooses pixels to draw from the WaxeEq dataset to create the WaveEq-100 dataset.
-
 ### Moving MNIST
 
 The training dataset is generated on the fly.
